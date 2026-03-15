@@ -10,7 +10,7 @@
 # ╚════██║ ██╔██╗ ██║   ██║██╔══╝  
 # ███████║██╔╝ ██╗╚██████╔╝███████╗
 # ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
-#           MADE BY SATYAM
+#           MADE BY TRS
 # ==========================================
 
 # --- Modern Gradient Colors ---
@@ -34,6 +34,14 @@ B_BLUE='\033[1;38;5;39m'
 B_PURPLE='\033[1;38;5;141m'
 NC='\033[0m'
 
+# --- Trap for Clean Exit ---
+cleanup() {
+    echo -e "\n    ${B_PINK}Exiting...${NC}"
+    tput cnorm
+    exit 0
+}
+trap cleanup SIGINT SIGTERM
+
 # --- Header ---
 print_header() {
     clear
@@ -51,7 +59,7 @@ print_header() {
     echo -e "    ${GRAY}│${NC}  ${B_CYAN}╚════██║ ██╔██╗ ██║   ██║██╔══╝  ${NC}          ${GRAY}│${NC}"
     echo -e "    ${GRAY}│${NC}  ${B_CYAN}███████║██╔╝ ██╗╚██████╔╝███████╗${NC}          ${GRAY}│${NC}"
     echo -e "    ${GRAY}│${NC}  ${B_CYAN}╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝${NC}          ${GRAY}│${NC}"
-    echo -e "    ${GRAY}│${NC}           ${B_PINK}MADE BY SATYAM${NC}                      ${GRAY}│${NC}"
+    echo -e "    ${GRAY}│${NC}           ${B_PINK}MADE BY TRS${NC}                      ${GRAY}│${NC}"
     echo -e "    ${GRAY}╰──────────────────────────────────────────────╯${NC}"
     echo ""
 }
@@ -61,6 +69,7 @@ progress_bar() {
     local width=${1:-40}
     local label="${2:-Progress}"
     local color="${3:-$B_CYAN}"
+    tput civis
     echo -ne "    ${B_WHITE}$label:${NC} ["
     for ((i=0; i<=width; i++)); do
         local pct=$((i * 100 / width))
@@ -74,6 +83,7 @@ progress_bar() {
         echo -ne "] ${pct}%"
         sleep 0.02
     done
+    tput cnorm
     echo ""
 }
 
@@ -105,7 +115,7 @@ check_dependencies() {
     sleep 0.5
     
     local missing=()
-    local deps=("curl" "wget" "qemu-system-x86_64" "cloud-localds" "qemu-img")
+    local deps=("curl" "wget")
     
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &> /dev/null; then
@@ -120,10 +130,14 @@ check_dependencies() {
         read install
         if [[ "$install" =~ ^[Yy]$ ]]; then
             print_status "INFO" "Installing dependencies..."
-            sudo apt update && sudo apt install -y qemu-system cloud-image-utils wget curl lsof
-            progress_bar 30 "Installing" "$B_GREEN"
-            print_status "SUCCESS" "Dependencies installed!"
-            sleep 1
+            if command -v apt &> /dev/null; then
+                sudo apt update -qq && sudo apt install -y -qq "${missing[@]}"
+                progress_bar 30 "Installing" "$B_GREEN"
+                print_status "SUCCESS" "Dependencies installed!"
+            else
+                print_status "ERROR" "Package manager not found. Please install manually."
+                sleep 2
+            fi
         else
             print_status "WARN" "Some features may not work without dependencies"
             sleep 1
@@ -140,9 +154,9 @@ setup_idx() {
     print_status "INFO" "Setting up Google IDX workspace..."
     progress_bar 30 "Configuring"
     
-    cd ~
+    cd ~ || return
     rm -rf myapp flutter 2>/dev/null
-    mkdir -p vps123/.idx && cd vps123/.idx
+    mkdir -p vps123/.idx && cd vps123/.idx || return
 
     cat <<EOF > dev.nix
 { pkgs, ... }: {
@@ -206,7 +220,13 @@ while true; do
             print_header
             print_status "INFO" "Launching VPS Engine..."
             progress_bar 20 "Connecting"
-            bash <(curl -s https://raw.githubusercontent.com/Satyam-Bhaii/pixleninja/main/Vpsmakerr.sh)
+            
+            if bash <(curl -s https://raw.githubusercontent.com/Satyam-Bhaii/pixleninja/main/Vpsmakerr.sh); then
+                echo -e "\n    ${B_GREEN}✓ Session ended.${NC}"
+            else
+                echo -e "\n    ${B_RED}✗ Failed to load VM Manager.${NC}"
+            fi
+            
             echo -ne "\n    ${B_WHITE}Press ${B_GREEN}[ENTER]${B_WHITE} to return...${NC}"
             read
             ;;
@@ -220,8 +240,10 @@ while true; do
             read confirm
             if [[ "$confirm" =~ ^[Yy]$ ]]; then
                 print_status "INFO" "Deploying default VM..."
-                progress_bar 40 "Deploying" "$B_GREEN"
-                print_status "SUCCESS" "Auto deployment complete!"
+                print_status "WARN" "Auto-deploy requires VPS MAKER PRO"
+                echo -e "    ${B_WHITE}Please use option 2 for full VM creation.${NC}"
+                progress_bar 40 "Preparing" "$B_GREEN"
+                print_status "SUCCESS" "Ready for deployment!"
                 sleep 2
             fi
             ;;
@@ -230,12 +252,14 @@ while true; do
             echo -e "\n    ${B_PINK}Terminating session...${NC}"
             progress_bar 20 "Closing" "$B_PINK"
             echo -e "    ${B_CYAN}Goodbye! 👋${NC}\n"
+            tput cnorm
             exit 0
             ;;
 
         *)
             echo -e "\n    ${B_RED}✗ Invalid command!${NC}"
-            sleep 1
+            echo -e "    ${B_WHITE}Please enter 1-4${NC}"
+            sleep 1.5
             ;;
     esac
 done

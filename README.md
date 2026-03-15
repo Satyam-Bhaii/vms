@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.0.0-blue)
+![Version](https://img.shields.io/badge/version-3.0.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **Next-Generation Virtual Machine Management System**
@@ -20,12 +20,14 @@
 - **Animated Banners** - Eye-catching ASCII art headers
 - **Progress Bars** - Visual feedback for all operations
 - **Icon-based Menus** - Easy navigation with emoji icons
+- **Clean Exit Handling** - Proper cleanup on interrupt
 
 ### 🖥️ VM Management
 - **Multi-OS Support** - Ubuntu, Debian, Fedora, AlmaLinux
 - **One-Click Creation** - Automated VM setup with cloud-init
 - **Start/Stop/Delete** - Full VM lifecycle management
 - **Status Monitoring** - Real-time VM status display
+- **PID Tracking** - Process management for VMs
 
 ### 📸 Snapshot System
 - **Create Snapshots** - Save VM states instantly
@@ -42,12 +44,26 @@
 - **Dependency Check** - Automatic detection of missing packages
 - **One-Click Install** - Auto-install required dependencies
 - **KVM Support** - Hardware acceleration enabled
+- **Internet Check** - Connection verification before download
 
 ---
 
 ## 🚀 Quick Start
 
-### Run the Main Menu
+### 🔥 Online Launch (Direct from GitHub)
+
+```bash
+# Quick Launch - Recommended!
+bash <(curl -sL https://raw.githubusercontent.com/Satyam-Bhaii/vms/main/Satyam.sh)
+
+# Or use the run.sh launcher
+bash <(curl -sL https://raw.githubusercontent.com/Satyam-Bhaii/vms/main/run.sh)
+
+# Full Installer (installs + launches)
+bash <(curl -sL https://raw.githubusercontent.com/Satyam-Bhaii/vms/main/install.sh)
+```
+
+### 📦 Manual Install
 ```bash
 bash Satyam.sh
 ```
@@ -79,6 +95,13 @@ The scripts will automatically detect and offer to install missing dependencies.
 ```bash
 sudo apt update
 sudo apt install -y qemu-system cloud-image-utils wget curl lsof
+```
+
+### Enable KVM (If not enabled)
+```bash
+sudo modprobe kvm
+sudo modprobe kvm_intel  # For Intel CPUs
+sudo modprobe kvm_amd    # For AMD CPUs
 ```
 
 ---
@@ -130,6 +153,7 @@ Satyam IDX/
 ├── *.img             # VM disk images
 ├── *-seed.iso        # Cloud-init configs
 ├── *.conf            # VM configurations
+├── *.pid             # Process ID files
 └── .snapshots/       # Snapshot storage
 ```
 
@@ -139,7 +163,7 @@ Satyam IDX/
 
 When creating VMs:
 - **Default Username:** `user` (or custom)
-- **Default Password:** `pixle123` (if empty)
+- **Default Password:** `trs123` (if empty)
 - **Default SSH Port:** `2222`
 
 ### SSH Connection
@@ -154,7 +178,7 @@ ssh user@localhost -p 2222
 | Color | Code | Usage |
 |-------|------|-------|
 | 🔴 Red | `#FF0055` | Errors, Stop |
-| 🩷 Pink | `#FF66FF` | Accents |
+| 🩷 Pink | `#FF66FF` | Accents, Watermark |
 | 🟣 Purple | `#CC66FF` | Borders, Headers |
 | 🔵 Blue | `#0066FF` | Info |
 | 🟢 Green | `#00FF66` | Success, Running |
@@ -169,6 +193,7 @@ ssh user@localhost -p 2222
 3. **Disk Space** - Each VM requires ~2-5GB storage
 4. **RAM Usage** - Allocate memory based on system capacity
 5. **Port Conflicts** - Ensure SSH ports are unique per VM
+6. **Internet** - Required for downloading cloud images
 
 ---
 
@@ -187,9 +212,10 @@ sudo modprobe kvm_amd    # For AMD
 
 ### Permission Denied
 ```bash
-# Add user to libvirt group
+# Add user to libvirt/kvm groups
 sudo usermod -aG libvirt $USER
 sudo usermod -aG kvm $USER
+# Logout and login again
 ```
 
 ### Network Issues
@@ -199,6 +225,35 @@ sudo lsof -i :2222
 
 # Use a different port when creating VM
 ```
+
+### Download Failed
+```bash
+# Check internet connection
+ping -c 4 google.com
+
+# Try manual download
+wget <image-url> -O ~/vms/vm-name.img
+```
+
+---
+
+## 🔄 Changelog
+
+### v3.0.1 - Bug Fixes & Enhancements
+- ✅ Fixed cursor visibility issues
+- ✅ Added proper signal trapping (Ctrl+C handling)
+- ✅ Improved input validation
+- ✅ Fixed VM list display bugs
+- ✅ Added PID tracking for VMs
+- ✅ Better error messages
+- ✅ Internet connection check
+- ✅ Clean exit handling
+
+### v3.0.0 - Initial Release
+- 🎨 Modern gradient UI
+- 🖥️ Multi-VM management
+- 📸 Snapshot system
+- 📊 Resource monitoring
 
 ---
 
@@ -219,10 +274,10 @@ MIT License - Feel free to use and modify!
 ╚════██║ ██╔██╗ ██║   ██║██╔══╝  
 ███████║██╔╝ ██╗╚██████╔╝███████╗
 ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
-          MADE BY SATYAM
+          MADE BY TRS
 ```
 
-**Made with ❤️ by SATYAM**
+**Made with ❤️ by TRS**
 
 *PIXLE CORE - Ultra Modern VPS Manager*
 

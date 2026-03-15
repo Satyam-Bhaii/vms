@@ -10,7 +10,7 @@
 # ╚════██║ ██╔██╗ ██║   ██║██╔══╝  
 # ███████║██╔╝ ██╗╚██████╔╝███████╗
 # ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
-#           MADE BY SATYAM
+#           MADE BY TRS
 # ==========================================
 
 # --- Modern Gradient Colors ---
@@ -30,8 +30,18 @@ B_GREEN='\033[1;38;5;82m'
 B_YELLOW='\033[1;38;5;226m'
 B_WHITE='\033[1;38;5;255m'
 B_BLUE='\033[1;38;5;39m'
+B_PURPLE='\033[1;38;5;141m'
 NC='\033[0m'
 BOLD='\033[1m'
+GRAY='\033[38;5;240m'
+
+# --- Trap for Clean Exit ---
+cleanup() {
+    echo -e "\n    ${B_PINK}Exiting...${NC}"
+    tput cnorm  # Show cursor
+    exit 0
+}
+trap cleanup SIGINT SIGTERM
 
 # --- Gradient Text Function ---
 gradient_text() {
@@ -51,12 +61,14 @@ modern_loading() {
     local frames=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
     local end_time=$((SECONDS + duration))
     
+    tput civis  # Hide cursor
     while [ $SECONDS -lt $end_time ]; do
         for frame in "${frames[@]}"; do
             printf "\r    ${B_CYAN}%s${NC} ${B_WHITE}Loading...${NC}" "$frame"
             sleep 0.05
         done
     done
+    tput cnorm  # Show cursor
     printf "\r    ${B_GREEN}✓${NC} ${B_WHITE}Ready!          ${NC}\n"
     sleep 0.3
 }
@@ -65,6 +77,7 @@ modern_loading() {
 progress_bar() {
     local width=${1:-40}
     local label="${2:-Progress}"
+    tput civis
     echo -ne "    ${B_WHITE}$label:${NC} ["
     for ((i=0; i<=width; i++)); do
         local pct=$((i * 100 / width))
@@ -78,6 +91,7 @@ progress_bar() {
         echo -ne "] ${pct}%"
         sleep 0.02
     done
+    tput cnorm
     echo ""
 }
 
@@ -100,7 +114,7 @@ animated_banner() {
     echo -e "    ${GRAY}│${NC}  ${B_CYAN}╚════██║ ██╔██╗ ██║   ██║██╔══╝  ${NC}          ${GRAY}│${NC}"
     echo -e "    ${GRAY}│${NC}  ${B_CYAN}███████║██╔╝ ██╗╚██████╔╝███████╗${NC}          ${GRAY}│${NC}"
     echo -e "    ${GRAY}│${NC}  ${B_CYAN}╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝${NC}          ${GRAY}│${NC}"
-    echo -e "    ${GRAY}│${NC}           ${B_PINK}MADE BY SATYAM${NC}                      ${GRAY}│${NC}"
+    echo -e "    ${GRAY}│${NC}           ${B_PINK}MADE BY TRS${NC}                      ${GRAY}│${NC}"
     echo -e "    ${GRAY}╰──────────────────────────────────────────────╯${NC}"
     echo ""
 }
@@ -113,7 +127,7 @@ menu_option() {
     local desc="$4"
     echo -e "    ${B_PURPLE}┌─────────────────────────────────────────────────────────┐${NC}"
     echo -e "    ${B_PURPLE}│${NC}  ${B_CYAN}[$num]${NC} ${icon} ${B_WHITE}$text${NC}"
-    echo -e "    ${B_PURPLE}│${NC}      ${GRAY}$desc${NC}$(printf '%*s' $((48 - ${#desc})))${NC}"
+    echo -e "    ${B_PURPLE}│${NC}      ${GRAY}$desc${NC}"
     echo -e "    ${B_PURPLE}└─────────────────────────────────────────────────────────┘${NC}"
 }
 
@@ -130,12 +144,24 @@ show_system_info() {
     echo ""
 }
 
-# --- Main Logic ---
-GRAY='\033[38;5;240m'
+# --- Check Internet Connection ---
+check_internet() {
+    if ! ping -c 1 8.8.8.8 &>/dev/null; then
+        echo -e "    ${B_YELLOW}⚠ WARNING: No internet connection detected!${NC}"
+        echo -e "    ${B_WHITE}Some features may not work properly.${NC}"
+        echo -ne "    ${B_WHITE}Continue anyway? [y/n]:${NC} "
+        read confirm
+        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+            exit 0
+        fi
+    fi
+}
 
+# --- Main Logic ---
 animated_banner
 modern_loading 1
 show_system_info
+check_internet
 
 while true; do
     animated_banner
@@ -159,22 +185,37 @@ while true; do
         1|01)
             echo -e "\n    ${B_CYAN}⚡ Connecting to VPS Engine...${NC}"
             progress_bar 30 "Initializing"
-            sleep 0.5
-            bash <(curl -s https://raw.githubusercontent.com/Satyam-Bhaii/pixleninja/main/vpsmaker.sh)
+            
+            # Check if curl is available
+            if ! command -v curl &> /dev/null; then
+                echo -e "    ${B_RED}✗ ERROR: curl not installed!${NC}"
+                echo -e "    ${B_WHITE}Installing curl...${NC}"
+                sudo apt update -qq && sudo apt install -y -qq curl
+            fi
+            
+            # Fetch and run vpsmaker
+            if bash <(curl -s https://raw.githubusercontent.com/Satyam-Bhaii/pixleninja/main/vpsmaker.sh); then
+                echo -e "\n    ${B_GREEN}✓ Session ended.${NC}"
+            else
+                echo -e "\n    ${B_RED}✗ Failed to load VPS Maker. Check your connection.${NC}"
+            fi
+            
             echo -e "\n    ${B_WHITE}Press ${B_GREEN}[ENTER]${B_WHITE} to return...${NC}"
             read
             ;;
         2|02)
             echo -e "\n    ${B_YELLOW}⚠️  Settings panel coming soon!${NC}"
-            sleep 1.5
+            echo -e "    ${B_WHITE}This feature is under development.${NC}"
+            sleep 2
             ;;
         3|03)
             clear
             echo -e "\n    ${B_CYAN}═══ SYSTEM RESOURCES ═══${NC}\n"
             echo -e "    ${B_WHITE}CPU Cores:${NC} $(nproc 2>/dev/null || echo 'N/A')"
-            echo -e "    ${B_WHITE}Memory:${NC} $(free -h 2>/dev/null | grep Mem || echo 'N/A')"
-            echo -e "    ${B_WHITE}Disk Usage:${NC}\n"
-            df -h ~ 2>/dev/null | head -2
+            echo -e "    ${B_WHITE}Memory:${NC}"
+            free -h 2>/dev/null | grep -E "^Mem|^Swap" || echo -e "        ${GRAY}Not available${NC}"
+            echo -e "\n    ${B_WHITE}Disk Usage:${NC}"
+            df -h ~ 2>/dev/null | head -3 || echo -e "        ${GRAY}Not available${NC}"
             echo -e "\n    ${B_WHITE}Press ${B_GREEN}[ENTER]${B_WHITE} to return...${NC}"
             read
             ;;
@@ -182,11 +223,13 @@ while true; do
             echo -e "\n    ${B_PINK}Shutting down PIXLE CORE...${NC}"
             progress_bar 20 "Closing"
             echo -e "    ${B_CYAN}Goodbye! 👋${NC}\n"
+            tput cnorm
             exit 0
             ;;
         *)
             echo -e "\n    ${B_RED}❌ Invalid selection!${NC}"
-            sleep 1
+            echo -e "    ${B_WHITE}Please enter 1-4${NC}"
+            sleep 1.5
             ;;
     esac
 done

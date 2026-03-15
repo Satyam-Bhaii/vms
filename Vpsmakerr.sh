@@ -1,5 +1,4 @@
 #!/bin/bash
-set -euo pipefail
 
 # ==========================================
 # MULTI-VM MANAGER - ULTRA MODERN EDITION
@@ -11,7 +10,7 @@ set -euo pipefail
 # ╚════██║ ██╔██╗ ██║   ██║██╔══╝  
 # ███████║██╔╝ ██╗╚██████╔╝███████╗
 # ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
-#           MADE BY SATYAM
+#           MADE BY TRS
 # ==========================================
 
 # --- Modern Gradient Colors ---
@@ -40,6 +39,14 @@ VM_DIR="$HOME/vms"
 SNAPSHOT_DIR="$VM_DIR/.snapshots"
 VERSION="3.0.0"
 
+# --- Trap for Clean Exit ---
+cleanup() {
+    echo -e "\n    ${B_PINK}Cleaning up...${NC}"
+    tput cnorm
+    exit 0
+}
+trap cleanup SIGINT SIGTERM
+
 # ==========================================
 # UI FUNCTIONS
 # ==========================================
@@ -60,7 +67,7 @@ display_header() {
     echo -e "    ${GRAY}│${NC}  ${B_CYAN}╚════██║ ██╔██╗ ██║   ██║██╔══╝  ${NC}          ${GRAY}│${NC}"
     echo -e "    ${GRAY}│${NC}  ${B_CYAN}███████║██╔╝ ██╗╚██████╔╝███████╗${NC}          ${GRAY}│${NC}"
     echo -e "    ${GRAY}│${NC}  ${B_CYAN}╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝${NC}          ${GRAY}│${NC}"
-    echo -e "    ${GRAY}│${NC}           ${B_PINK}MADE BY SATYAM${NC}                      ${GRAY}│${NC}"
+    echo -e "    ${GRAY}│${NC}           ${B_PINK}MADE BY TRS${NC}                      ${GRAY}│${NC}"
     echo -e "    ${GRAY}╰──────────────────────────────────────────────╯${NC}"
     echo ""
 }
@@ -81,26 +88,24 @@ progress_bar() {
     local width=${1:-40}
     local label="${2:-Progress}"
     local color="${3:-$B_CYAN}"
-    local duration="${4:-1}"
-    local steps=$((width / duration / 10))
-    [ $steps -lt 1 ] && steps=1
-    
+    tput civis
     echo -ne "    ${B_WHITE}$label:${NC} ["
-    for ((i=0; i<=width; i+=steps)); do
+    for ((i=0; i<=width; i++)); do
         local pct=$((i * 100 / width))
         printf "\r    ${B_WHITE}$label:${NC} ["
         if [ $i -gt 0 ]; then
             echo -ne "$color"
-            for ((j=0; j<i/steps; j++)); do printf "█"; done
+            for ((j=0; j<i; j++)); do printf "█"; done
             echo -ne "${NC}"
         fi
-        for ((j=i/steps; j<width/steps; j++)); do printf "░"; done
+        for ((j=i; j<width; j++)); do printf "░"; done
         echo -ne "] ${pct}%"
-        sleep 0.05
+        sleep 0.03
     done
+    tput cnorm
     printf "\r    ${B_WHITE}$label:${NC} ["
     echo -ne "$color"
-    for ((j=0; j<width/steps; j++)); do printf "█"; done
+    for ((j=0; j<width; j++)); do printf "█"; done
     echo -ne "${NC}] 100%"
     echo ""
 }
@@ -123,7 +128,7 @@ check_dependencies() {
     sleep 0.5
     
     local missing=()
-    local deps=("qemu-system-x86_64" "wget" "cloud-localds" "qemu-img" "lsof" "virsh")
+    local deps=("qemu-system-x86_64" "wget" "cloud-localds" "qemu-img")
     
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &> /dev/null; then
@@ -138,33 +143,34 @@ check_dependencies() {
         progress_bar 30 "Installing" "$B_GREEN" 2
         
         if command -v apt &> /dev/null; then
-            sudo apt update -qq && sudo apt install -y -qq qemu-system cloud-image-utils wget curl lsof libvirt-daemon-system
+            sudo apt update -qq && sudo apt install -y -qq qemu-system cloud-image-utils wget curl lsof
+            print_status "SUCCESS" "Dependencies installed!"
         elif command -v yum &> /dev/null; then
             sudo yum install -y qemu-kvm libvirt wget curl cloud-utils
+            print_status "SUCCESS" "Dependencies installed!"
         else
-            print_status "ERROR" "Package manager not detected. Please install manually."
+            print_status "ERROR" "Package manager not detected."
+            print_status "INFO" "Continuing in limited mode..."
             sleep 2
         fi
-        
-        print_status "SUCCESS" "Dependencies installed!"
-        sleep 1
     else
         print_status "SUCCESS" "All dependencies found!"
         sleep 0.5
     fi
     
     # Create directories
-    mkdir -p "$VM_DIR" "$SNAPSHOT_DIR"
+    mkdir -p "$VM_DIR" "$SNAPSHOT_DIR" 2>/dev/null || true
 }
 
 get_vm_list() {
-    find "$VM_DIR" -name "*.conf" -maxdepth 1 2>/dev/null | sort | xargs -I {} basename {} .conf
+    if [ -d "$VM_DIR" ]; then
+        find "$VM_DIR" -maxdepth 1 -name "*.conf" -type f 2>/dev/null | sort | while read -r f; do basename "$f" .conf; done
+    fi
 }
 
 is_vm_running() {
     local vm_name=$1
-    pgrep -f "qemu-system.*$vm_name" >/dev/null 2>&1 && return 0
-    return 1
+    pgrep -f "qemu.*$vm_name" >/dev/null 2>&1
 }
 
 get_vm_status() {
@@ -180,6 +186,7 @@ load_vm_config() {
     local vm_name=$1
     local config_file="$VM_DIR/$vm_name.conf"
     if [[ -f "$config_file" ]]; then
+        # shellcheck source=/dev/null
         source "$config_file"
         return 0
     fi
@@ -217,10 +224,12 @@ setup_vm_image() {
     # Download if not exists
     if [[ ! -f "$IMG_FILE" ]]; then
         print_status "INFO" "Downloading ${OS_TYPE} cloud image..."
-        wget -q --show-progress "$IMG_URL" -O "$IMG_FILE" || {
+        if wget -q --show-progress "$IMG_URL" -O "$IMG_FILE"; then
+            print_status "SUCCESS" "Download complete!"
+        else
             print_status "ERROR" "Failed to download image"
             return 1
-        }
+        fi
     fi
 
     # Resize disk
@@ -230,7 +239,10 @@ setup_vm_image() {
     # Create cloud-init config
     print_status "INFO" "Generating cloud-init configuration..."
     
-    cat > /tmp/user-data-$VM_NAME <<EOF
+    local encrypted_pass
+    encrypted_pass=$(openssl passwd -6 "$PASSWORD" 2>/dev/null || echo "$PASSWORD")
+    
+    cat > "/tmp/user-data-$VM_NAME" <<EOF
 #cloud-config
 hostname: $HOSTNAME
 ssh_pwauth: true
@@ -245,25 +257,26 @@ users:
   - name: $USERNAME
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
-    password: $(openssl passwd -6 "$PASSWORD" 2>/dev/null || echo "$PASSWORD")
+    password: $encrypted_pass
     lock_passwd: false
 chpasswd:
   expire: false
 EOF
     
-    cat > /tmp/meta-data-$VM_NAME <<EOF
+    cat > "/tmp/meta-data-$VM_NAME" <<EOF
 instance-id: iid-$VM_NAME
 local-hostname: $HOSTNAME
 EOF
 
-    cloud-localds "$SEED_FILE" /tmp/user-data-$VM_NAME /tmp/meta-data-$VM_NAME 2>/dev/null || {
-        print_status "WARN" "cloud-localds not available, creating basic ISO"
-        # Fallback: create a simple ISO
-        mkisofs -output "$SEED_FILE" -volid cidata -joliet -rock \
-            /tmp/user-data-$VM_NAME /tmp/meta-data-$VM_NAME 2>/dev/null || true
-    }
+    if command -v cloud-localds &> /dev/null; then
+        cloud-localds "$SEED_FILE" "/tmp/user-data-$VM_NAME" "/tmp/meta-data-$VM_NAME" 2>/dev/null || {
+            print_status "WARN" "cloud-localds failed, trying alternative..."
+        }
+    else
+        print_status "WARN" "cloud-localds not available"
+    fi
     
-    rm -f /tmp/user-data-$VM_NAME /tmp/meta-data-$VM_NAME
+    rm -f "/tmp/user-data-$VM_NAME" "/tmp/meta-data-$VM_NAME"
     
     print_status "SUCCESS" "VM image prepared successfully!"
 }
@@ -273,19 +286,19 @@ create_vm() {
     print_status "INFO" "CREATE NEW VIRTUAL MACHINE"
     echo ""
     
-    # OS Selection
+    # OS Selection with better UI
     echo -e "    ${B_WHITE}╭─────────────────────────────────────────────╮${NC}"
     echo -e "    ${B_WHITE}│${NC}  ${B_PURPLE}SELECT OPERATING SYSTEM${NC}                    ${B_WHITE}│${NC}"
     echo -e "    ${B_WHITE}╰─────────────────────────────────────────────╯${NC}"
     echo ""
-    echo -e "    ${B_CYAN}[1]${NC} ${B_WHITE}Ubuntu 24.04 LTS${NC}     (Recommended)"
+    echo -e "    ${B_CYAN}[1]${NC} ${B_WHITE}Ubuntu 24.04 LTS${NC}     ${GRAY}(Recommended)${NC}"
     echo -e "    ${B_CYAN}[2]${NC} ${B_WHITE}Debian 12${NC}"
     echo -e "    ${B_CYAN}[3]${NC} ${B_WHITE}Fedora 40${NC}"
     echo -e "    ${B_CYAN}[4]${NC} ${B_WHITE}AlmaLinux 9${NC}"
     echo ""
     
     echo -ne "    ${B_CYAN}└─❯${NC} ${B_WHITE}OS Choice:${NC} "
-    read os_choice
+    read -r os_choice
     
     case $os_choice in
         1) OS_TYPE="Ubuntu"; IMG_URL="https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img" ;;
@@ -305,25 +318,26 @@ create_vm() {
     echo -e "    ${B_WHITE}╰─────────────────────────────────────────────╯${NC}"
     echo ""
     
-    print_status "INPUT" "VM Name" && read VM_NAME
+    print_status "INPUT" "VM Name" && read -r VM_NAME
+    [ -z "$VM_NAME" ] && VM_NAME="vm-$(date +%s)"
     HOSTNAME="$VM_NAME"
     
-    print_status "INPUT" "Username (default: user)" && read USERNAME
+    print_status "INPUT" "Username (default: user)" && read -r USERNAME
     USERNAME=${USERNAME:-user}
     
     print_status "INPUT" "Password" && read -s PASSWORD && echo
-    [ -z "$PASSWORD" ] && PASSWORD="pixle123"
+    [ -z "$PASSWORD" ] && PASSWORD="trs123"
     
-    print_status "INPUT" "Disk Size (e.g., 20G, default: 20G)" && read DISK_SIZE
+    print_status "INPUT" "Disk Size (e.g., 20G, default: 20G)" && read -r DISK_SIZE
     DISK_SIZE=${DISK_SIZE:-20G}
     
-    print_status "INPUT" "RAM MB (default: 2048)" && read MEMORY
+    print_status "INPUT" "RAM MB (default: 2048)" && read -r MEMORY
     MEMORY=${MEMORY:-2048}
     
-    print_status "INPUT" "CPU Cores (default: 2)" && read CPUS
+    print_status "INPUT" "CPU Cores (default: 2)" && read -r CPUS
     CPUS=${CPUS:-2}
     
-    print_status "INPUT" "SSH Port (default: 2222)" && read SSH_PORT
+    print_status "INPUT" "SSH Port (default: 2222)" && read -r SSH_PORT
     SSH_PORT=${SSH_PORT:-2222}
     
     GUI_MODE=false
@@ -342,7 +356,7 @@ create_vm() {
     echo -e "    ${B_WHITE}SSH: ${B_GREEN}ssh $USERNAME@localhost -p $SSH_PORT${NC}"
     echo -e "    ${B_WHITE}Password: ${B_YELLOW}$PASSWORD${NC}"
     echo -ne "\n    ${B_WHITE}Press ${B_GREEN}[ENTER]${B_WHITE} to continue...${NC}"
-    read
+    read -r
 }
 
 start_vm() {
@@ -365,9 +379,9 @@ start_vm() {
     progress_bar 30 "Booting" "$B_GREEN"
     
     # Update last started time
-    sed -i "s/LAST_STARTED=.*/LAST_STARTED=\"$(date '+%Y-%m-%d %H:%M:%S')\"/" "$VM_DIR/$vm_name.conf"
+    sed -i "s/LAST_STARTED=.*/LAST_STARTED=\"$(date '+%Y-%m-%d %H:%M:%S')\"/" "$VM_DIR/$vm_name.conf" 2>/dev/null || true
     
-    # Start QEMU
+    # Start QEMU in background
     qemu-system-x86_64 -enable-kvm \
         -m "$MEMORY" \
         -smp "$CPUS" \
@@ -378,7 +392,10 @@ start_vm() {
         -device virtio-net-pci,netdev=n0 \
         -nographic -serial mon:stdio &
     
-    print_status "SUCCESS" "VM started on port $SSH_PORT"
+    local vm_pid=$!
+    echo $vm_pid > "$VM_DIR/$vm_name.pid" 2>/dev/null || true
+    
+    print_status "SUCCESS" "VM started on port $SSH_PORT (PID: $vm_pid)"
     sleep 2
 }
 
@@ -399,9 +416,15 @@ stop_vm() {
     fi
     
     print_status "INFO" "Stopping VM: $vm_name"
-    pkill -f "qemu-system.*$vm_name" 2>/dev/null || true
+    
+    # Try graceful shutdown first
+    pkill -f "qemu.*$vm_name" 2>/dev/null || true
     
     progress_bar 20 "Stopping" "$B_RED"
+    
+    # Clean up PID file
+    rm -f "$VM_DIR/$vm_name.pid" 2>/dev/null || true
+    
     print_status "SUCCESS" "VM stopped"
     sleep 2
 }
@@ -413,15 +436,18 @@ delete_vm() {
     print_status "WARN" "DELETE VM: $vm_name"
     echo -e "    ${B_RED}This action cannot be undone!${NC}"
     echo ""
-    print_status "INPUT" "Type '$vm_name' to confirm" && read confirm
+    print_status "INPUT" "Type '$vm_name' to confirm" && read -r confirm
     
     if [ "$confirm" = "$vm_name" ]; then
+        # Stop VM if running
         if is_vm_running "$vm_name"; then
-            pkill -f "qemu-system.*$vm_name" 2>/dev/null || true
+            pkill -f "qemu.*$vm_name" 2>/dev/null || true
+            sleep 1
         fi
         
-        rm -f "$VM_DIR/$vm_name"*.img "$VM_DIR/$vm_name"*.iso "$VM_DIR/$vm_name.conf"
-        rm -f "$SNAPSHOT_DIR/$vm_name"*.qcow2
+        # Delete files
+        rm -f "$VM_DIR/$vm_name"*.img "$VM_DIR/$vm_name"*.iso "$VM_DIR/$vm_name.conf" "$VM_DIR/$vm_name.pid" 2>/dev/null
+        rm -f "$SNAPSHOT_DIR/$vm_name"*.qcow2 2>/dev/null
         
         print_status "SUCCESS" "VM deleted successfully"
     else
@@ -447,15 +473,16 @@ create_snapshot() {
         return 1
     fi
     
-    print_status "INPUT" "Snapshot name" && read snap_name
+    print_status "INPUT" "Snapshot name" && read -r snap_name
     snap_name=${snap_name:-$(date +%Y%m%d_%H%M%S)}
     
     mkdir -p "$SNAPSHOT_DIR"
     
     if [ -f "$IMG_FILE" ]; then
         print_status "INFO" "Creating snapshot..."
-        qemu-img create -f qcow2 -b "$IMG_FILE" -F qcow2 "$SNAPSHOT_DIR/${vm_name}-${snap_name}.qcow2"
-        print_status "SUCCESS" "Snapshot created: $snap_name"
+        qemu-img create -f qcow2 -b "$IMG_FILE" -F qcow2 "$SNAPSHOT_DIR/${vm_name}-${snap_name}.qcow2" 2>/dev/null && \
+            print_status "SUCCESS" "Snapshot created: $snap_name" || \
+            print_status "ERROR" "Failed to create snapshot"
     else
         print_status "ERROR" "VM disk not found"
     fi
@@ -469,14 +496,16 @@ list_snapshots() {
     print_status "INFO" "SNAPSHOTS FOR: $vm_name"
     echo ""
     
-    local snaps=($(ls "$SNAPSHOT_DIR/${vm_name}"*.qcow2 2>/dev/null))
+    local snaps
+    mapfile -t snaps < <(ls "$SNAPSHOT_DIR/${vm_name}"*.qcow2 2>/dev/null)
     
     if [ ${#snaps[@]} -gt 0 ]; then
         echo -e "    ${B_WHITE}┌────────────────────────────────────────┐${NC}"
         echo -e "    ${B_WHITE}│  SNAPSHOT NAME                         │${NC}"
         echo -e "    ${B_WHITE}├────────────────────────────────────────┤${NC}"
         for snap in "${snaps[@]}"; do
-            local name=$(basename "$snap")
+            local name
+            name=$(basename "$snap")
             printf "    ${B_WHITE}│${NC}  %-36s  ${B_WHITE}│${NC}\n" "$name"
         done
         echo -e "    ${B_WHITE}└────────────────────────────────────────┘${NC}"
@@ -485,7 +514,7 @@ list_snapshots() {
     fi
     
     echo -ne "\n    ${B_WHITE}Press ${B_GREEN}[ENTER]${B_WHITE} to continue...${NC}"
-    read
+    read -r
 }
 
 restore_snapshot() {
@@ -495,7 +524,8 @@ restore_snapshot() {
     print_status "INFO" "RESTORE SNAPSHOT: $vm_name"
     echo ""
     
-    local snaps=($(ls "$SNAPSHOT_DIR/${vm_name}"*.qcow2 2>/dev/null))
+    local snaps
+    mapfile -t snaps < <(ls "$SNAPSHOT_DIR/${vm_name}"*.qcow2 2>/dev/null)
     
     if [ ${#snaps[@]} -eq 0 ]; then
         print_status "WARN" "No snapshots available"
@@ -509,9 +539,9 @@ restore_snapshot() {
     done
     echo ""
     
-    print_status "INPUT" "Select snapshot number" && read snap_idx
+    print_status "INPUT" "Select snapshot number" && read -r snap_idx
     
-    if [ "$snap_idx" -le "${#snaps[@]}" ] && [ "$snap_idx" -gt 0 ]; then
+    if [[ "$snap_idx" =~ ^[0-9]+$ ]] && [ "$snap_idx" -le "${#snaps[@]}" ] && [ "$snap_idx" -gt 0 ]; then
         local selected="${snaps[$((snap_idx-1))]}"
         print_status "INFO" "Restoring from $(basename "$selected")..."
         
@@ -519,8 +549,9 @@ restore_snapshot() {
             stop_vm "$vm_name"
         fi
         
-        cp "$selected" "$IMG_FILE"
-        print_status "SUCCESS" "Snapshot restored!"
+        cp "$selected" "$IMG_FILE" && \
+            print_status "SUCCESS" "Snapshot restored!" || \
+            print_status "ERROR" "Failed to restore"
     else
         print_status "WARN" "Invalid selection"
     fi
@@ -532,7 +563,8 @@ restore_snapshot() {
 # ==========================================
 
 show_vm_list() {
-    local vms=($(get_vm_list))
+    local vms
+    mapfile -t vms < <(get_vm_list)
     
     if [ ${#vms[@]} -gt 0 ]; then
         echo -e "    ${B_PURPLE}┌────────┬────────────────────────┬──────────┬─────────┐${NC}"
@@ -540,7 +572,8 @@ show_vm_list() {
         echo -e "    ${B_PURPLE}├────────┼────────────────────────┼──────────┼─────────┤${NC}"
         for i in "${!vms[@]}"; do
             load_vm_config "${vms[$i]}" &>/dev/null || true
-            local status=$(get_vm_status "${vms[$i]}")
+            local status
+            status=$(get_vm_status "${vms[$i]}")
             printf "    ${B_PURPLE}│${NC}  %02d     ${B_PURPLE}│${NC}  %-20s    ${B_PURPLE}│${NC}  %-7s ${B_PURPLE}│${NC}  %b     ${B_PURPLE}│${NC}\n" \
                 $((i+1)) "${vms[$i]}" "${SSH_PORT:-N/A}" "$status"
         done
@@ -563,8 +596,10 @@ show_resources() {
     echo ""
     
     # CPU Info
-    local cpu_cores=$(nproc 2>/dev/null || echo "N/A")
-    local cpu_model=$(grep "model name" /proc/cpuinfo 2>/dev/null | head -1 | cut -d: -f2 | xargs || echo "N/A")
+    local cpu_cores
+    cpu_cores=$(nproc 2>/dev/null || echo "N/A")
+    local cpu_model
+    cpu_model=$(grep "model name" /proc/cpuinfo 2>/dev/null | head -1 | cut -d: -f2 | xargs || echo "N/A")
     echo -e "    ${B_CYAN}CPU:${NC}"
     echo -e "        Model: ${B_WHITE}$cpu_model${NC}"
     echo -e "        Cores: ${B_GREEN}$cpu_cores${NC}"
@@ -572,7 +607,11 @@ show_resources() {
     
     # Memory Info
     echo -e "    ${B_CYAN}MEMORY:${NC}"
-    free -h 2>/dev/null | awk 'NR==2{printf "        Total: %s\n        Used: %s\n        Free: %s\n", $2, $3, $4}' || echo "        N/A"
+    if command -v free &> /dev/null; then
+        free -h | awk 'NR==2{printf "        Total: %s\n        Used: %s\n        Free: %s\n", $2, $3, $4}'
+    else
+        echo "        N/A"
+    fi
     echo ""
     
     # Disk Info
@@ -581,11 +620,12 @@ show_resources() {
     echo ""
     
     # VM Count
-    local vm_count=$(get_vm_list | wc -l)
+    local vm_count
+    vm_count=$(get_vm_list | wc -l)
     local running_count=0
-    for vm in $(get_vm_list); do
-        is_vm_running "$vm" && ((running_count++))
-    done
+    while IFS= read -r vm; do
+        [ -n "$vm" ] && is_vm_running "$vm" && ((running_count++))
+    done < <(get_vm_list)
     
     echo -e "    ${B_CYAN}VIRTUAL MACHINES:${NC}"
     echo -e "        Total VMs: ${B_WHITE}$vm_count${NC}"
@@ -594,7 +634,7 @@ show_resources() {
     echo ""
     
     echo -ne "    ${B_WHITE}Press ${B_GREEN}[ENTER]${B_WHITE} to continue...${NC}"
-    read
+    read -r
 }
 
 # ==========================================
@@ -618,16 +658,16 @@ while true; do
     menu_option "X" "🚪" "EXIT"
     echo ""
     
-    print_status "INPUT" "Command" && read cmd
+    print_status "INPUT" "Command" && read -r cmd
     
     case ${cmd,,} in
         n)
             create_vm
             ;;
         s)
-            print_status "INPUT" "VM ID to Start" && read id
-            vms=($(get_vm_list))
-            if [ "$id" -le "${#vms[@]}" ] 2>/dev/null; then
+            print_status "INPUT" "VM ID to Start" && read -r id
+            mapfile -t vms < <(get_vm_list)
+            if [[ "$id" =~ ^[0-9]+$ ]] && [ "$id" -le "${#vms[@]}" ]; then
                 start_vm "${vms[$((id-1))]}"
             else
                 print_status "ERROR" "Invalid ID"
@@ -635,9 +675,9 @@ while true; do
             fi
             ;;
         p)
-            print_status "INPUT" "VM ID to Stop" && read id
-            vms=($(get_vm_list))
-            if [ "$id" -le "${#vms[@]}" ] 2>/dev/null; then
+            print_status "INPUT" "VM ID to Stop" && read -r id
+            mapfile -t vms < <(get_vm_list)
+            if [[ "$id" =~ ^[0-9]+$ ]] && [ "$id" -le "${#vms[@]}" ]; then
                 stop_vm "${vms[$((id-1))]}"
             else
                 print_status "ERROR" "Invalid ID"
@@ -645,9 +685,9 @@ while true; do
             fi
             ;;
         d)
-            print_status "INPUT" "VM ID to Delete" && read id
-            vms=($(get_vm_list))
-            if [ "$id" -le "${#vms[@]}" ] 2>/dev/null; then
+            print_status "INPUT" "VM ID to Delete" && read -r id
+            mapfile -t vms < <(get_vm_list)
+            if [[ "$id" =~ ^[0-9]+$ ]] && [ "$id" -le "${#vms[@]}" ]; then
                 delete_vm "${vms[$((id-1))]}"
             else
                 print_status "ERROR" "Invalid ID"
@@ -664,9 +704,9 @@ while true; do
             echo -e "    ${B_CYAN}[2]${NC} List Snapshots"
             echo -e "    ${B_CYAN}[3]${NC} Restore Snapshot"
             echo ""
-            print_status "INPUT" "Option" && read snap_opt
+            print_status "INPUT" "Option" && read -r snap_opt
             
-            vms=($(get_vm_list))
+            mapfile -t vms < <(get_vm_list)
             if [ ${#vms[@]} -eq 0 ]; then
                 print_status "WARN" "No VMs available"
                 sleep 2
@@ -674,14 +714,15 @@ while true; do
             fi
             
             echo ""
-            print_status "INPUT" "VM ID" && read vm_id
+            print_status "INPUT" "VM ID" && read -r vm_id
             
-            if [ "$vm_id" -le "${#vms[@]}" ] 2>/dev/null; then
+            if [[ "$vm_id" =~ ^[0-9]+$ ]] && [ "$vm_id" -le "${#vms[@]}" ]; then
                 vm_name="${vms[$((vm_id-1))]}"
                 case $snap_opt in
                     1) create_snapshot "$vm_name" ;;
                     2) list_snapshots "$vm_name" ;;
                     3) restore_snapshot "$vm_name" ;;
+                    *) print_status "WARN" "Invalid option" ;;
                 esac
             fi
             ;;
@@ -692,11 +733,13 @@ while true; do
             echo -e "\n    ${B_PINK}Shutting down VM Manager...${NC}"
             progress_bar 20 "Closing" "$B_PURPLE"
             echo -e "    ${B_CYAN}Goodbye! 👋${NC}\n"
+            tput cnorm
             exit 0
             ;;
         *)
             echo -e "\n    ${B_RED}✗ Invalid command!${NC}"
-            sleep 1
+            echo -e "    ${B_WHITE}Press N, S, P, D, C, R, or X${NC}"
+            sleep 1.5
             ;;
     esac
 done
